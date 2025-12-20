@@ -1,13 +1,15 @@
 (ns game.core
   "Главная точка входа и интеграции всех систем игры.
    Связывает STM модули, команды и сетевую часть."
-  (:require [game.game.world :as world]
+  (:require [game.adapters.mire-player :as mire-player]
+            [game.sync :as sync]
+            [game.game.world :as world]
             [game.game.items :as items]
             [game.players.state :as players]
             [game.players.inventory :as inventory]
             [game.util.helpers :as helpers]
             ;; Импорт оригинальных модулей Mire
-            [mire.player :as mire-player]
+            [mire.player :as mire-player-orig]
             [mire.rooms :as mire-rooms]
             [mire.commands :as mire-commands]
             [mire.util :as mire-util]))
@@ -34,23 +36,28 @@
     (println "=== ИНИЦИАЛИЗАЦИЯ СИСТЕМ ИГРЫ ===")
     
     ;; 1. Загружаем оригинальный Mire мир
-    (println "[1/5] Загрузка оригинального Mire...")
+    (println "[1/6] Загрузка оригинального Mire...")
     (mire-rooms/add-rooms)
     
     ;; 2. Инициализируем наш STM мир
-    (println "[2/5] Инициализация STM мира...")
+    (println "[2/6] Инициализация STM мира...")
     ;; (мир уже инициализирован при загрузке world.clj)
     
     ;; 3. Инициализируем систему предметов
-    (println "[3/5] Инициализация системы предметов...")
+    (println "[3/6] Инициализация системы предметов...")
     ;; (предметы уже инициализированы)
     
     ;; 4. Инициализируем системы игроков
-    (println "[4/5] Инициализация систем игроков...")
+    (println "[4/6] Инициализация систем игроков...")
     ;; (системы уже инициализированы)
     
-    ;; 5. Настраиваем интеграцию
-    (println "[5/5] Настройка интеграции...")
+    ;; 5. Синхронизация с оригинальным Mire
+    (println "[5/6] Синхронизация с оригинальным Mire...")
+    (sync/sync-all-rooms)
+    (sync/sync-all-players)
+    
+    ;; 6. Настраиваем интеграцию
+    (println "[6/6] Настройка интеграции...")
     
     ;; Устанавливаем флаги
     (alter game-state assoc 
@@ -59,6 +66,7 @@
            :running true)
     
     (println "=== ВСЕ СИСТЕМЫ ИНИЦИАЛИЗИРОВАНЫ ===\n")))
+
 
 ;; ИНТЕГРАЦИЯ С ОРИГИНАЛЬНЫМ MIRE
 (defn integrate-mire-player
