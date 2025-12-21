@@ -1,0 +1,18 @@
+{
+  :name "Архив"
+  :desc "Комната с архивными стеллажами. Пахнет старыми книгами и пылью. На столе лежат лабораторные журналы и научные отчёты."
+  :exits {
+    :east :hallway
+  }
+  :items #{"journal" "formulas"}
+  :players #{}
+  :puzzle {
+    :type :find-date
+    :solved false
+    :question "В каком месяце была основана лаборатория? (номер месяца)"
+    :answer "10"
+    :hint "Посмотрите в лабораторном журнале"
+    :found false
+  }
+  :locked-exits #{}
+}
