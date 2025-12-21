@@ -1,0 +1,14 @@
+{
+  :name "Выход"
+  :desc "Вы на свободе! Перед вами открывается вид на город. Лаборатория осталась позади."
+  :exits {}
+  :items #{}
+  :players #{}
+  :puzzle {
+    :type :final
+    :solved false
+    :required-puzzles [:microscope-puzzle :code-lock :find-date :repair-console]
+    :message "Поздравляем! Вы выбрались из лаборатории!"
+  }
+  :locked-exits #{}
+}
