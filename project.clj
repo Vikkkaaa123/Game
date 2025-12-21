@@ -1,6 +1,6 @@
 (defproject mire "0.0.1"
-  :description "Кооперативная текстовая игра 'Побег из лаборатории' с STM"
-  :url "https://github.com/your-org/escape-game"
+  :description "Кооперативная текстовая игра 'Побег из лаборатории' на Clojure с STM"
+  :url "https://github.com/Vikkkaaa123/Game"
   
   :dependencies [
     ;; Clojure
@@ -9,26 +9,24 @@
     ;; Оригинальные зависимости Mire
     [org.clojure/tools.cli "1.0.219"]
     
-    ;; Для веб-сервера (Человек 3)
-    [org.httpkit/httpkit "2.8.0"]
-    [compojure "1.7.0"]
-    [ring/ring-core "1.11.0"]
-    [ring/ring-defaults "0.4.0"]
-    [cheshire "5.12.0"]  ;; JSON парсинг
+    ;; Для WebSocket сервера (человек 3)
+    [http-kit "2.7.0"]
     
-    ;; Утилиты
-    [clojure.java-time "1.4.2"]  ;; Работа со временем
-    [org.clojure/tools.logging "1.3.0"]  ;; Логирование
+    ;; Для JSON (веб-интерфейс)
+    [cheshire "5.12.0"]
   ]
   
-  ;; Исходные пути - ВАЖНО! Добавляем путь к нашей игре
-  :source-paths ["src" "src/game"]
+  ;; Исходные пути - ОЧЕНЬ ВАЖНО!
+  :source-paths ["src" "src/mire" "src/game"]
   
   ;; Ресурсы
-  :resource-paths ["resources" "resources/rooms" "resources/items"]
+  :resource-paths ["resources"]
   
   ;; Главный класс для запуска
-  :main game.core
+  :main mire.server
+  
+  ;; Минимальная версия Leiningen
+  :min-lein-version "2.0.0"
   
   ;; Плагины
   :plugins [[lein-ring "0.12.6"]]
@@ -37,8 +35,8 @@
   :profiles {
     :dev {
       :dependencies [
-        ;; Для тестирования в REPL
-        [org.clojure/tools.namespace "1.4.4"]
+        ;; Для тестирования
+        [org.clojure/test.check "1.1.1"]
         [criterium "0.4.6"]
       ]
       :source-paths ["dev"]
@@ -46,32 +44,39 @@
     
     :uberjar {
       :aot :all
-      :main game.core
-      :uberjar-name "escape-game-standalone.jar"
-    }
-    
-    :test {
-      :dependencies [
-        [org.clojure/test.check "1.1.1"]
-      ]
+      :main mire.server
+      :uberjar-name "mire-standalone.jar"
+      :jvm-opts ["-Dclojure.compiler.direct-linking=true"]
     }
   }
   
-  ;; Настройки для Uberjar
-  :uberjar {
-    :exclusions [#"\.jar$"]
-  }
-  
-  ;; Настройки сборки
-  :min-lein-version "2.9.0"
-  
-  ;; JVM настройки
+  ;; JVM настройки для поддержки русского языка
   :jvm-opts [
     "-server"
-    "-Xmx2g"
+    "-Xmx1g"
     "-XX:+UseG1GC"
     "-Dfile.encoding=UTF-8"
+    "-Dsun.jnu.encoding=UTF-8"
+    "-Djava.awt.headless=true"
   ]
+  
+  ;; Алиасы для удобства
+  :aliases {
+    ;; Запуск игры
+    "run-game" ["run" "-m" "mire.server"]
+    
+    ;; Запуск с тестовыми данными
+    "run-test" ["run" "-m" "mire.server" "--test"]
+    
+    ;; Создание Uberjar
+    "build" ["do" "clean," "uberjar"]
+    
+    ;; Тесты
+    "test-all" ["do" "test"]
+    
+    ;; REPL с загруженными зависимостями
+    "repl-dev" ["do" "clean," "repl"]
+  }
   
   ;; Репозитории
   :repositories [
@@ -79,49 +84,12 @@
     ["clojars" {:url "https://repo.clojars.org/"}]
   ]
   
-  ;; Документация
-  :scm {:name "git"
-        :url "https://github.com/your-org/escape-game"}
-  
+  ;; Лицензия
   :license {:name "MIT License"
             :url "https://opensource.org/licenses/MIT"}
   
-  ;; Тестирование
-  :test-selectors {
-    :default (constantly true)
-    :unit :unit
-    :integration :integration
-    :stm :stm
-  }
-  
-  :aliases {
-    ;; Запуск игры
-    "run-game" ["run" "-m" "game.core"]
-    
-    ;; Запуск тестов
-    "test-all" ["do" "test"]
-    
-    ;; Создание Uberjar
-    "build" ["uberjar"]
-    
-    ;; Запуск REPL с загруженными зависимостями
-    "repl" ["do" "clean," "repl"]
-    
-    ;; Проверка стиля кода
-    "lint" ["do" "eastwood," "kibit"]
-    
-    ;; Запуск с тестовым режимом
-    "test-run" ["run" "-m" "game.core" "--test"]
-  }
-  
-  ;; Настройки Eastwood (линтер)
-  :eastwood {
-    :config-files ["eastwood-config.clj"]
-    :exclude-linters [:unused-ret-vals]
-  }
-  
-  ;; Подсказки для IDE
-  :lein-tools-deps/config {
-    :aliases {:dev {:extra-paths ["dev"]}}
+  ;; Для Emacs/CIDER
+  :cider {
+    :nrepl-middleware ["cider.nrepl/cider-middleware"]
   }
 )
