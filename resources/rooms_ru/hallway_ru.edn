@@ -1,0 +1,21 @@
+{
+  :name "Коридор"
+  :desc "Длинный коридор с дверьми по обеим сторонам. На стене висит схема лаборатории. Одна дверь ведёт в архив, другая - в серверную. На полу лежит забытая схема."
+  :exits {
+    :south :laboratory
+    :east :console_room
+    :west :archive
+  }
+  :items #{"blueprint"}
+  :players #{}
+  :puzzle {
+    :type :code-lock
+    :solved false
+    :question "Код от серверной: 3XX7"
+    :hint "X = номер месяца основания лаборатории"
+    :solution "3107"
+    :attempts 0
+    :max-attempts 3
+  }
+  :locked-exits #{:west}
+}
