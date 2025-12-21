@@ -1,347 +1,376 @@
-(ns game.game.items
+(ns game.items
   "Система предметов игры.
    Управление свойствами предметов, их взаимодействием и STM состоянием."
-  (:require [game.game.world :as world]))
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
-;; БАЗА ДАННЫХ ПРЕДМЕТОВ (immutable данные)
-(def items-db
-  {
-   ;; Ключи и доступы
-   "ключ-карта" {
-     :name "Ключ-карта"
-     :description "Пластиковая карта с магнитной полосой. Имеет логотип лаборатории 'Sigma Labs'."
-     :type :key
-     :weight 0.1
-     :value 50
-     :properties {:material "plastic" :magnetic true}
-     :usable-in [:hallway :archive]
-     :usage-effect "Открывает электронные замки"
-     :examination "На обратной стороне выгравирован серийный номер: SL-2023-47"
-   }
-   
-   "провод" {
-     :name "Медный провод"
-     :description "Длинный медный провод с изоляцией красного цвета. Длина около 2 метров."
-     :type :component
-     :weight 0.5
-     :value 10
-     :properties {:material "copper" :insulated true :length 2}
-     :usable-in [:promenade :hallway]
-     :usage-effect "Используется для починки электроники"
-     :examination "На изоляции есть маркировка '10 AWG'. Один конец оголен."
-     :combine-with ["схема"]
-   }
-   
-   "схема" {
-     :name "Схема подключения"
-     :description "Техническая схема с обозначением разъемов и контактов."
-     :type :document
-     :weight 0.2
-     :value 25
-     :properties {:pages 3 :language "technical"}
-     :usable-in [:promenade]
-     :usage-effect "Показывает правильное подключение проводов"
-     :examination "На схеме подпись: 'Консоль управления, контактная группа B7-B12'"
-     :combine-with ["провод"]
-   }
-   
-   "микроскоп" {
-     :name "Электронный микроскоп"
-     :description "Современный микроскоп с цифровым дисплеем. Увеличение до 1000x."
-     :type :tool
-     :weight 5.0
-     :value 500
-     :properties {:digital true :magnification 1000}
-     :usable-in [:start]
-     :usage-effect "Позволяет исследовать микрообъекты"
-     :examination "Под линзой находится слайд с надписью: '3XX7 (X = месяц основания лаборатории)'"
-     :fixed true  ;; Нельзя взять в инвентарь
-   }
-   
-   "лабораторный-журнал" {
-     :name "Лабораторный журнал"
-     :description "Толстая книга с записями экспериментов. Обложка кожаная."
-     :type :document
-     :weight 1.5
-     :value 75
-     :properties {:pages 250 :year 1997}
-     :usable-in [:archive :start]
-     :usage-effect "Содержит исторические записи и подсказки"
-     :examination "На первой странице: 'Основано: октябрь 1997 года. Директор: д-р А. Волков.'"
-     :readable "Записи за 12.10.1997: 'Эксперимент #47: Успех! Код доступа к серверной: 3107'"
-   }
-   
-   "формулы" {
-     :name "Лист с формулами"
-     :description "Бумажный лист с математическими уравнениями и химическими формулами."
-     :type :document
-     :weight 0.1
-     :value 5
-     :properties {:paper "A4" :handwritten true}
-     :usable-in [:archive]
-     :usage-effect "Содержит научные данные"
-     :examination "В углу мелким почерком: 'Код для ежедневного доступа в серверную: 3107'"
-   }
-   
-   "консоль" {
-     :name "Консоль управления"
-     :description "Центральная панель управления лабораторией. Имеет множество кнопок и экранов."
-     :type :device
-     :weight 100.0
-     :value 10000
-     :properties {:powered false :screens 3}
-     :usable-in [:promenade]
-     :usage-effect "Контролирует системы лаборатории"
-     :examination "На дисплее мигает сообщение: 'ОШИБКА: Нет связи с источником питания'"
-     :fixed true
-     :requires ["провод" "схема"]
-   }
-   
-   "батарейка" {
-     :name "Батарейка типа АА"
-     :description "Щелочная батарейка. Напряжение 1.5V."
-     :type :component
-     :weight 0.05
-     :value 2
-     :properties {:type "AA" :voltage 1.5 :charge "full"}
-     :usable-in [:start :hallway]
-     :usage-effect "Источник питания для мелкой электроники"
-     :examination "На корпусе надпись: 'Energizer, срок годности 2025'"
-   }
-   
-   "отвертка" {
-     :name "Крестовая отвертка"
-     :description "Отвертка с намагниченным жалом. Рукоятка прорезиненная."
-     :type :tool
-     :weight 0.3
-     :value 15
-     :properties {:size "PH2" :magnetic true}
-     :usable-in [:start :promenade :hallway]
-     :usage-effect "Для разборки оборудования"
-     :examination "На ручке гравировка: 'Собственность тех. отдела'"
-   }
-   })
 
-;; STM СОСТОЯНИЕ ПРЕДМЕТОВ (изменяемые свойства)
+
+;; БАЗА ДАННЫХ ПРЕДМЕТОВ (загружается из .edn файлов)
+
+(defonce items-db (atom {}))
+
+(defn load-items-from-edn
+  "Загрузить предметы из .edn файлов"
+  []
+  (println "[ITEMS] Загрузка предметов из EDN файлов...")
+  
+  (let [item-files ["keycard.edn" "microscope.edn" "wire.edn" 
+                    "journal.edn" "blueprint.edn" "formulas.edn" "console.edn"]
+        loaded-items (atom {})]
+    
+    (doseq [item-file item-files]
+      (let [path (str "resources/items/" item-file)]
+        (when (.exists (io/file path))
+          (try
+            (let [item-data (edn/read-string (slurp path))
+                  item-key (keyword (str/replace item-file #"\.edn$" ""))]
+              (swap! loaded-items assoc item-key item-data)
+              (println "  ✓ Загружен:" (:name item-data)))
+            (catch Exception e
+              (println "  ✗ Ошибка загрузки" item-file ":" e))))))
+    
+    (reset! items-db @loaded-items)
+    (println "  Всего предметов:" (count @items-db))
+    @loaded-items))
+
+;; Загружаем при старте
+(load-items-from-edn)
+
+
+
+;; STM СОСТОЯНИЕ ПРЕДМЕТОВ
+
 (defonce items-state
   (ref {
-    ;; Состояния предметов (использованы/сломаны/активны)
+    ;; Состояния предметов
     :conditions {
-      "ключ-карта" {:used false :charged true}
-      "провод" {:connected false :insulation-good true}
-      "консоль" {:repaired false :powered false}
-      "батарейка" {:charge 100}
+      :keycard {:used false :charged true}
+      :wire {:connected false :insulation-good true}
+      :console {:repaired false :powered false}
+      :microscope {:examined false}
+      :journal {:read false}
+      :blueprint {:read false}
+      :formulas {:read false}
     }
     
-    ;; Позиции предметов (синхронизируется с миром)
-    :positions {}
-    
-    ;; Взаимодействия между предметами
-    :combinations {}
+    ;; Позиции предметов
+    :positions {
+      :keycard :laboratory
+      :wire :laboratory
+      :microscope :laboratory
+      :blueprint :hallway_ru
+      :journal :archive
+      :formulas :archive
+      :console :console_room
+    }
     
     ;; История использования
-    :usage-history {}
+    :usage-history []
   }))
 
-;; ФУНКЦИИ ДЛЯ РАБОТЫ С БАЗОЙ ПРЕДМЕТОВ
+
+
+;; ФУНКЦИИ ДЛЯ РАБОТЫ С ПРЕДМЕТАМИ
+
 (defn get-item
-  "Получить полное описание предмета"
-  [item-name]
-  (get items-db item-name))
+  "Получить данные предмета по ключу"
+  [item-key]
+  (get @items-db item-key))
 
 (defn get-item-name
-  "Получить имя предмета"
-  [item-name]
-  (get-in items-db [item-name :name]))
+  "Получить отображаемое имя предмета"
+  [item-key]
+  (:name (get-item item-key)))
 
-(defn get-item-description
+(defn get-item-desc
   "Получить описание предмета"
-  [item-name]
-  (get-in items-db [item-name :description]))
-
-(defn get-item-type
-  "Получить тип предмета"
-  [item-name]
-  (get-in items-db [item-name :type]))
+  [item-key]
+  (:desc (get-item item-key)))
 
 (defn item-exists?
   "Проверить существование предмета"
-  [item-name]
-  (contains? items-db item-name))
+  [item-key]
+  (contains? @items-db item-key))
 
-(defn get-item-weight
-  "Получить вес предмета"
-  [item-name]
-  (get-in items-db [item-name :weight]))
+(defn get-item-type
+  "Получить тип предмета"
+  [item-key]
+  (:type (get-item item-key)))
 
 (defn is-item-fixed?
   "Проверить, закреплен ли предмет (нельзя взять)"
-  [item-name]
-  (get-in items-db [item-name :fixed]))
+  [item-key]
+  (:fixed (get-item item-key) false))
 
 (defn get-item-examination
   "Получить текст осмотра предмета"
-  [item-name]
-  (get-in items-db [item-name :examination]))
+  [item-key]
+  (:examination (get-item item-key)))
 
-(defn get-item-readable
-  "Получить текст для чтения (если предмет - документ)"
-  [item-name]
-  (get-in items-db [item-name :readable]))
+(defn get-item-hint
+  "Получить подсказку из предмета"
+  [item-key]
+  (:hint (get-item item-key)))
 
-;; ФУНКЦИИ ДЛЯ РАБОТЫ СО СОСТОЯНИЕМ ПРЕДМЕТОВ (STM)
+(defn get-item-effect
+  "Получить эффект использования"
+  [item-key]
+  (:effect (get-item item-key)))
+
+
+
+
+;; ФУНКЦИИ ДЛЯ РАБОТЫ СО СОСТОЯНИЕМ (STM)
+
 (defn set-item-condition!
   "Установить состояние предмета"
-  [item-name condition value]
+  [item-key condition value]
   (dosync
-    (alter items-state assoc-in [:conditions item-name condition] value)))
+    (alter items-state assoc-in [:conditions item-key condition] value)))
 
 (defn get-item-condition
   "Получить состояние предмета"
-  [item-name condition]
-  (get-in @items-state [:conditions item-name condition]))
-
-(defn update-item-position!
-  "Обновить позицию предмета в мире"
-  [item-name room-name]
-  (dosync
-    (alter items-state assoc-in [:positions item-name] room-name)))
-
-(defn get-item-position
-  "Получить текущую позицию предмета"
-  [item-name]
-  (get-in @items-state [:positions item-name]))
+  [item-key condition]
+  (get-in @items-state [:conditions item-key condition]))
 
 (defn mark-item-used!
   "Пометить предмет как использованный"
-  [item-name player-name]
+  [item-key player-name]
   (dosync
-    (set-item-condition! item-name :used true)
-    (set-item-condition! item-name :last-used-by player-name)
-    (set-item-condition! item-name :last-used-time (System/currentTimeMillis))
-    (alter items-state update-in [:usage-history item-name] 
-           (fn [history] (conj (or history []) 
-                               {:player player-name 
-                                :time (System/currentTimeMillis)})))))
+    (set-item-condition! item-key :used true)
+    (set-item-condition! item-key :used-by player-name)
+    (set-item-condition! item-key :used-time (System/currentTimeMillis))
+    (alter items-state update :usage-history conj 
+           {:item item-key
+            :player player-name
+            :time (System/currentTimeMillis)})))
+
+(defn mark-item-examined!
+  "Пометить предмет как осмотренный"
+  [item-key player-name]
+  (dosync
+    (set-item-condition! item-key :examined true)
+    (set-item-condition! item-key :examined-by player-name)
+    (set-item-condition! item-key :examined-time (System/currentTimeMillis))))
+
+(defn mark-item-read!
+  "Пометить документ как прочитанный"
+  [item-key player-name]
+  (dosync
+    (set-item-condition! item-key :read true)
+    (set-item-condition! item-key :read-by player-name)
+    (set-item-condition! item-key :read-time (System/currentTimeMillis))))
+
+(defn get-item-position
+  "Получить позицию предмета"
+  [item-key]
+  (get-in @items-state [:positions item-key]))
+
+(defn set-item-position!
+  "Установить позицию предмета"
+  [item-key position]
+  (dosync
+    (alter items-state assoc-in [:positions item-key] position)))
+
+(defn move-item!
+  "Переместить предмет"
+  [item-key from to]
+  (dosync
+    (alter items-state update :positions assoc item-key to)
+    true))
+
+
+
+;; ФУНКЦИИ ДЛЯ ИГРОВОЙ ЛОГИКИ
 
 (defn can-use-item?
   "Проверить, можно ли использовать предмет в данной комнате"
-  [item-name room-name]
-  (let [usable-rooms (get-in items-db [item-name :usable-in])]
-    (and usable-rooms (some #{room-name} usable-rooms))))
+  [item-key room-key]
+  (let [usable-in (:usable-in (get-item item-key))]
+    (and usable-in (contains? (set usable-in) room-key))))
 
-(defn get-required-items
-  "Получить список предметов, необходимых для использования данного"
-  [item-name]
-  (get-in items-db [item-name :requires]))
-
-(defn get-combine-items
-  "Получить предметы, с которыми можно комбинировать данный"
-  [item-name]
-  (get-in items-db [item-name :combine-with]))
-
-(defn can-combine?
-  "Проверить, можно ли комбинировать два предмета"
-  [item1 item2]
-  (let [combine-list1 (get-combine-items item1)
-        combine-list2 (get-combine-items item2)]
-    (or (and combine-list1 (some #{item2} combine-list1))
-        (and combine-list2 (some #{item1} combine-list2)))))
-
-(defn record-combination!
-  "Записать факт комбинации предметов"
-  [item1 item2 player-name]
-  (dosync
-    (alter items-state update-in [:combinations [item1 item2]]
-           (fn [comb] (conj (or comb []) 
-                           {:player player-name 
-                            :time (System/currentTimeMillis)})))))
-
-;; ФУНКЦИИ ДЛЯ ИНТЕГРАЦИИ С МИРОМ
-(defn item-in-room?
-  "Проверить, находится ли предмет в комнате"
-  [item-name room-name]
-  (let [world-items (world/get-room-items room-name)]
-    (contains? world-items item-name)))
-
-(defn move-item-to-room!
-  "Переместить предмет в комнату"
-  [item-name room-name]
-  (when (item-exists? item-name)
-    (let [current-room (get-item-position item-name)]
-      (when current-room
-        (world/remove-item-from-room! current-room item-name))
-      (world/add-item-to-room! room-name item-name)
-      (update-item-position! item-name room-name))))
-
-(defn initialize-items-in-world!
-  "Инициализировать предметы в мире согласно настройкам"
-  []
-  (dosync
-    ;; Распределяем предметы по комнатам
-    (world/add-item-to-room! :start "ключ-карта")
-    (update-item-position! "ключ-карта" :start)
-    
-    (world/add-item-to-room! :start "провод")
-    (update-item-position! "провод" :start)
-    
-    (world/add-item-to-room! :start "микроскоп")
-    (update-item-position! "микроскоп" :start)
-    
-    (world/add-item-to-room! :hallway "схема")
-    (update-item-position! "схема" :hallway)
-    
-    (world/add-item-to-room! :archive "лабораторный-журнал")
-    (update-item-position! "лабораторный-журнал" :archive)
-    
-    (world/add-item-to-room! :archive "формулы")
-    (update-item-position! "формулы" :archive)
-    
-    (world/add-item-to-room! :promenade "консоль")
-    (update-item-position! "консоль" :promenade)))
-
-;; ФУНКЦИИ ДЛЯ ИГРОВОЙ ЛОГИКИ
 (defn use-item!
   "Использовать предмет"
-  [item-name player-name room-name]
-  (when (and (item-exists? item-name)
-             (can-use-item? item-name room-name))
-    (mark-item-used! item-name player-name)
-    (let [item-type (get-item-type item-name)]
-      (case item-type
-        :key {:message "Вы прикладываете ключ-карту к считывателю"}
-        :component {:message "Вы используете компонент"}
-        :document {:message "Вы изучаете документ"}
-        :tool {:message "Вы используете инструмент"}
-        :device {:message "Вы взаимодействуете с устройством"}
-        {:message "Вы используете предмет"}))))
+  [item-key player-name room-key]
+  (if (can-use-item? item-key room-key)
+    (do
+      (mark-item-used! item-key player-name)
+      {:success true
+       :message (get-item-effect item-key)
+       :item item-key
+       :item-name (get-item-name item-key)})
+    {:error true
+     :message "Нельзя использовать этот предмет здесь"}))
 
 (defn examine-item!
   "Осмотреть предмет"
-  [item-name player-name]
-  (when (item-exists? item-name)
-    (let [examination (get-item-examination item-name)
-          readable (get-item-readable item-name)
-          condition (get-in @items-state [:conditions item-name])]
-      {:examination examination
-       :readable readable
-       :condition condition
-       :used (get-item-condition item-name :used)})))
+  [item-key player-name]
+  (mark-item-examined! item-key player-name)
+  
+  (let [examination (get-item-examination item-key)
+        hint (get-item-hint item-key)
+        already-examined (get-item-condition item-key :examined)]
+    
+    {:success true
+     :item item-key
+     :item-name (get-item-name item-key)
+     :examination examination
+     :hint hint
+     :already-examined already-examined}))
 
-(defn get-available-items-in-room
-  "Получить доступные для взятия предметы в комнате"
-  [room-name]
-  (let [all-items (world/get-room-items room-name)]
-    (filter #(not (is-item-fixed? %)) all-items)))
+(defn read-document!
+  "Прочитать документ"
+  [item-key player-name]
+  (let [item-type (get-item-type item-key)]
+    (if (= item-type :document)
+      (do
+        (mark-item-read! item-key player-name)
+        {:success true
+         :item item-key
+         :item-name (get-item-name item-key)
+         :content (or (:readable (get-item item-key))
+                      (:desc (get-item item-key)))})
+      {:error true
+       :message "Это не документ"})))
+
+(defn combine-items!
+  "Скомбинировать два предмета"
+  [item1-key item2-key player-name]
+  (let [combine-with (:combine-with (get-item item1-key))]
+    (if (and combine-with (contains? (set combine-with) item2-key))
+      (do
+        (dosync
+          (mark-item-used! item1-key player-name)
+          (mark-item-used! item2-key player-name)
+          (set-item-condition! item1-key :combined-with item2-key)
+          (set-item-condition! item2-key :combined-with item1-key))
+        {:success true
+         :message (str "Вы скомбинировали " (get-item-name item1-key) 
+                      " и " (get-item-name item2-key))
+         :items [item1-key item2-key]})
+      {:error true
+       :message "Эти предметы нельзя скомбинировать"})))
+
+(defn find-item-by-name
+  "Найти предмет по имени (частичному совпадению)"
+  [name-pattern]
+  (let [pattern-lower (str/lower-case name-pattern)]
+    (first (filter (fn [[key data]]
+                     (str/includes? (str/lower-case (:name data)) pattern-lower))
+                   @items-db))))
+
+(defn get-all-items
+  "Получить все предметы"
+  []
+  (keys @items-db))
+
+(defn get-items-by-room
+  "Получить предметы в комнате"
+  [room-key]
+  (filter (fn [[key position]] (= position room-key))
+          (get-in @items-state [:positions])))
+
+(defn get-player-items
+  "Получить предметы игрока (в инвентаре)"
+  [player-inventory]
+  ;; player-inventory - это набор ключей предметов
+  (map (fn [item-key]
+         {:key item-key
+          :name (get-item-name item-key)
+          :desc (get-item-desc item-key)})
+       player-inventory))
+
+
+
+
+;; ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+
+(defn item-to-string
+  "Преобразовать предмет в строку для отображения"
+  [item-key]
+  (let [item-data (get-item item-key)
+        name (:name item-data)
+        type (:type item-data)
+        used (get-item-condition item-key :used)]
+    (str name 
+         (when used " (использован)")
+         " [" (name type) "]")))
+
+(defn format-item-list
+  "Отформатировать список предметов"
+  [item-keys]
+  (if (empty? item-keys)
+    "пусто"
+    (str/join ", " (map item-to-string item-keys))))
+
+(defn get-item-stats
+  "Получить статистику по предметам"
+  []
+  (let [total-items (count @items-db)
+        used-items (count (filter (fn [[key _]] (get-item-condition key :used))
+                                  (get-in @items-state [:conditions])))
+        examined-items (count (filter (fn [[key _]] (get-item-condition key :examined))
+                                      (get-in @items-state [:conditions])))]
+    
+    {:total-items total-items
+     :used-items used-items
+     :examined-items examined-items
+     :usage-history (count (get-in @items-state [:usage-history]))}))
+
+
 
 ;; ИНИЦИАЛИЗАЦИЯ
+
 (defn init-items-system
   "Инициализировать систему предметов"
   []
   (println "[ITEMS] Система предметов инициализирована")
-  (println "[ITEMS] Загружено предметов:" (count items-db))
-  (initialize-items-in-world!)
-  (println "[ITEMS] Предметы размещены в мире"))
+  (let [stats (get-item-stats)]
+    (println "[ITEMS] Предметов в базе:" (:total-items stats))
+    (println "[ITEMS] Использовано:" (:used-items stats))
+    (println "[ITEMS] Осмотрено:" (:examined-items stats))))
 
 ;; Автоматическая инициализация
 (init-items-system)
+
+
+
+
+;; ДЛЯ РАБОТЫ В REPL
+
+(comment
+  ;; Проверить загрузку предметов
+  (count @items-db)
+  (keys @items-db)
+  
+  ;; Получить информацию о предмете
+  (get-item :keycard)
+  (get-item-name :keycard)
+  (get-item-desc :wire)
+  
+  ;; Проверить состояния
+  @items-state
+  (get-item-condition :keycard :used)
+  
+  ;; Использовать предмет
+  (use-item! :keycard "Алексей" :laboratory)
+  (get-item-condition :keycard :used)
+  
+  ;; Осмотреть предмет
+  (examine-item! :microscope "Мария")
+  
+  ;; Прочитать документ
+  (read-document! :journal "Иван")
+  
+  ;; Получить статистику
+  (get-item-stats)
+  
+  ;; Найти предмет по имени
+  (find-item-by-name "ключ")
+  (find-item-by-name "провод")
+  
+  ;; Отформатировать список
+  (format-item-list [:keycard :wire :microscope])
+)
