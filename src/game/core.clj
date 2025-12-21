@@ -1,480 +1,573 @@
 (ns game.core
-  "Главная точка входа и интеграции всех систем игры.
-   Связывает STM модули, команды и сетевую часть."
-  (:require [game.adapters.mire-player :as mire-player]
-            [game.sync :as sync]
-            [game.game.world :as world]
-            [game.game.items :as items]
-            [game.players.state :as players]
-            [game.players.inventory :as inventory]
-            [game.util.helpers :as helpers]
-            ;; Импорт оригинальных модулей Mire
-            [mire.player :as mire-player-orig]
-            [mire.rooms :as mire-rooms]
-            [mire.commands :as mire-commands]
-            [mire.util :as mire-util]))
+  "Главная точка входа игры 'Побег из лаборатории'.
+   Координирует все системы: STM мир, игроков, предметы."
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
-;; ГЛОБАЛЬНОЕ СОСТОЯНИЕ ИГРЫ (интеграция всех систем)
+
+
+;; ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+
 (defonce game-state
-  (ref {
+  (atom {
     :initialized false
     :running false
     :start-time nil
-    :active-connections 0
-    :game-mode :cooperative
-    :difficulty :normal
+    :active-players 0
     :max-players 4
-    :current-cycle 0
+    :mode :cooperative
+    :log []
   }))
 
-;; ИНИЦИАЛИЗАЦИЯ ВСЕХ СИСТЕМ
-(defn init-all-systems
-  "Инициализировать все системы игры"
-  []
-  (dosync
-    ;; Инициализируем базовые системы
-    (println "=== ИНИЦИАЛИЗАЦИЯ СИСТЕМ ИГРЫ ===")
-    
-    ;; 1. Загружаем оригинальный Mire мир
-    (println "[1/6] Загрузка оригинального Mire...")
-    (mire-rooms/add-rooms)
-    
-    ;; 2. Инициализируем наш STM мир
-    (println "[2/6] Инициализация STM мира...")
-    ;; (мир уже инициализирован при загрузке world.clj)
-    
-    ;; 3. Инициализируем систему предметов
-    (println "[3/6] Инициализация системы предметов...")
-    ;; (предметы уже инициализированы)
-    
-   ;; 4. Инициализируем системы игроков
-    (println "[4/6] Инициализация систем игроков...")
-    ;; (системы уже инициализированы)
-    
-    ;; 5. Синхронизация с оригинальным Mire
-    (println "[5/6] Синхронизация с оригинальным Mire...")
-    (sync/sync-all-rooms)
-    (sync/sync-all-players)
-    
-    ;; 6. Настраиваем интеграцию
-    (println "[6/6] Настройка интеграции...")
-    
-    ;; Устанавливаем флаги
-    (alter game-state assoc 
-           :initialized true
-           :start-time (System/currentTimeMillis)
-           :running true)
-    
-    (println "=== ВСЕ СИСТЕМЫ ИНИЦИАЛИЗИРОВАНЫ ===\n")))
+(defonce world-ref (ref {}))
+(defonce players-ref (ref {}))
+(defonce items-ref (ref {}))
 
 
-;; ИНТЕГРАЦИЯ С ОРИГИНАЛЬНЫМ MIRE
-(defn integrate-mire-player
-  "Интегрировать оригинальную систему игроков Mire с нашей STM"
-  [player-name]
+
+;; БАЗОВЫЕ ФУНКЦИИ STM
+
+(defn get-world []
+  @world-ref)
+
+(defn get-players []
+  @players-ref)
+
+(defn get-items []
+  @items-ref)
+
+(defn add-log-entry [entry]
+  (swap! game-state update :log conj {:time (System/currentTimeMillis)
+                                      :entry entry}))
+
+
+
+;; ЗАГРУЗКА РЕСУРСОВ
+
+(defn load-edn-file [path]
+  "Загрузить EDN файл"
+  (try
+    (when (.exists (io/file path))
+      (with-open [r (io/reader path)]
+        (edn/read (java.io.PushbackReader. r))))
+    (catch Exception e
+      (println "[ERROR] Ошибка загрузки файла" path ":" e)
+      nil)))
+
+(defn load-russian-rooms []
+  "Загрузить русские комнаты из resources/rooms_ru/"
+  (println "[CORE] Загрузка русских комнат...")
+  
+  (let [room-files ["laboratory.edn" "hallway_ru.edn" "archive.edn" 
+                    "console_room.edn" "exit.edn"]
+        rooms-loaded (atom {})]
+    
+    (doseq [room-file room-files]
+      (let [path (str "resources/rooms_ru/" room-file)
+            room-data (load-edn-file path)]
+        
+        (when room-data
+          (let [room-key (keyword (str/replace room-file #"\.edn$" ""))]
+            (swap! rooms-loaded assoc room-key room-data)
+            (println "  ✓ Загружена:" (:name room-data))))))
+    
+    ;; Сохраняем в STM
+    (dosync
+      (ref-set world-ref (assoc @world-ref :rooms @rooms-loaded)))
+    
+    (println "  Всего комнат:" (count @rooms-loaded))
+    @rooms-loaded))
+
+(defn load-items []
+  "Загрузить предметы из resources/items/"
+  (println "[CORE] Загрузка предметов...")
+  
+  (let [item-files ["keycard.edn" "microscope.edn" "wire.edn" 
+                    "journal.edn" "blueprint.edn" "formulas.edn" "console.edn"]
+        items-loaded (atom {})]
+    
+    (doseq [item-file item-files]
+      (let [path (str "resources/items/" item-file)
+            item-data (load-edn-file path)]
+        
+        (when item-data
+          (let [item-key (keyword (str/replace item-file #"\.edn$" ""))]
+            (swap! items-loaded assoc item-key item-data)
+            (println "  ✓ Загружен:" (:name item-data))))))
+    
+    ;; Сохраняем в STM
+    (dosync
+      (ref-set items-ref @items-loaded))
+    
+    (println "  Всего предметов:" (count @items-loaded))
+    @items-loaded))
+
+
+
+;; УПРАВЛЕНИЕ КОМНАТАМИ
+
+(defn get-room [room-key]
+  "Получить комнату по ключу"
+  (get-in @world-ref [:rooms room-key]))
+
+(defn get-all-rooms []
+  "Получить все комнаты"
+  (keys (get-in @world-ref [:rooms])))
+
+(defn add-room! [room-key room-data]
+  "Добавить комнату"
   (dosync
-    ;; Создаем игрока в оригинальной системе Mire
-    (mire-player/add-player player-name)
+    (alter world-ref assoc-in [:rooms room-key] room-data)))
+
+(defn update-room! [room-key f & args]
+  "Обновить комнату"
+  (dosync
+    (apply alter world-ref update-in [:rooms room-key] f args)))
+
+
+
+;; УПРАВЛЕНИЕ ИГРОКАМИ
+
+(defn add-player! [player-name]
+  "Добавить игрока"
+  (dosync
+    (alter players-ref assoc player-name {
+      :name player-name
+      :room :laboratory
+      :inventory #{}
+      :joined-at (System/currentTimeMillis)
+      :last-action (System/currentTimeMillis)
+      :stats {
+        :commands-executed 0
+        :items-taken 0
+        :rooms-visited #{:laboratory}
+      }
+    })
     
-    ;; Создаем игрока в нашей STM системе
-    (players/connect-player! player-name)
+    ;; Добавляем игрока в стартовую комнату
+    (alter world-ref update-in [:rooms :laboratory :players] conj player-name)
     
-    ;; Синхронизируем позицию
-    (let [mire-room (mire-player/current-room player-name)
-          our-room :start]  ;; По умолчанию стартовая комната
+    (add-log-entry (str "Игрок подключился: " player-name))
+    {:success true
+     :player player-name
+     :room :laboratory}))
+
+(defn get-player [player-name]
+  "Получить игрока"
+  (get @players-ref player-name))
+
+(defn get-player-room [player-name]
+  "Получить комнату игрока"
+  (:room (get-player player-name)))
+
+(defn set-player-room! [player-name room-key]
+  "Установить комнату игрока"
+  (dosync
+    (let [old-room (get-player-room player-name)
+          room-data (get-room room-key)]
       
-      ;; Если в Mire есть комната, конвертируем ее
-      (when mire-room
-        ;; Здесь нужно преобразовать имя комнаты Mire в наше
-        ;; Пока используем стартовую
-        ))
-    
-    ;; Инициализируем инвентарь
-    (inventory/init-player-inventory player-name)
-    
-    (println "[INTEGRATION] Игрок" player-name "интегрирован")))
-
-(defn convert-mire-room
-  "Конвертировать комнату Mire в нашу структуру"
-  [mire-room-name]
-  ;; Базовая конвертация - по умолчанию используем :start
-  ;; Можно расширить для полной конвертации всех комнат
-  :start)
-
-(defn sync-player-movement
-  "Синхронизировать перемещение игрока между системами"
-  [player-name direction]
-  (dosync
-    (let [current-room (world/get-player-room player-name)
-          target-room (world/get-exit-room current-room (helpers/get-direction-keyword direction))]
-      
-      (when target-room
-        ;; Перемещаем в нашей системе
-        (world/move-player-between-rooms! current-room target-room player-name)
-        (world/set-player-room! player-name target-room)
+      (when (and old-room room-data)
+        ;; Убираем из старой комнаты
+        (alter world-ref update-in [:rooms old-room :players] disj player-name)
+        
+        ;; Добавляем в новую комнату
+        (alter world-ref update-in [:rooms room-key :players] conj player-name)
+        
+        ;; Обновляем у игрока
+        (alter players-ref assoc-in [player-name :room] room-key)
         
         ;; Обновляем статистику
-        (players/add-visited-room! player-name target-room)
+        (alter players-ref update-in [player-name :stats :rooms-visited] conj room-key)
         
-        ;; Синхронизируем с Mire (если нужно)
-        ;; (mire-player/move-player player-name direction)
-        
-        target-room))))
+        (add-log-entry (str player-name " переместился из " old-room " в " room-key))
+        true))))
 
-;; ОБРАБОТКА КОМАНД
-(defn handle-command
-  "Обработать команду игрока (интеграция с Mire и наша логика)"
-  [player-name input]
-  (dosync
-    (try
-      ;; Обновляем время последнего действия
-      (players/update-last-action! player-name)
-      
-      ;; Парсим команду
-      (let [parsed (helpers/parse-command input)
-            command (:command parsed)
-            normalized (helpers/normalize-command command)
-            args (:args parsed)]
-        
-        ;; Обрабатываем команду
-        (case normalized
-          
-          ;; Базовые команды Mire
-          "look" (handle-look player-name)
-          "go" (handle-go player-name args)
-          "north" (handle-move player-name "север")
-          "south" (handle-move player-name "юг")
-          "west" (handle-move player-name "запад")
-          "east" (handle-move player-name "восток")
-          "inventory" (handle-inventory player-name)
-          
-          ;; Наши расширенные команды
-          "взять" (handle-take player-name args)
-          "положить" (handle-drop player-name args)
-          "осмотреть" (handle-examine player-name args)
-          "использовать" (handle-use player-name args)
-          "сказать" (handle-say player-name args)
-          "помощь" (handle-help player-name)
-          "статус" (handle-status player-name)
-          
-          ;; Дефолтная обработка через Mire
-          (handle-mire-command player-name input)))
-      
-      ;; Увеличиваем счетчик команд
-      (players/increment-stat! player-name :commands-executed)
-      
-      (catch Exception e
-        (println "[ERROR]" player-name "ошибка в команде:" input e)
-        {:error true
-         :message "Ошибка выполнения команды"}))))
+(defn get-players-in-room [room-key]
+  "Получить игроков в комнате"
+  (get-in @world-ref [:rooms room-key :players]))
 
-(defn handle-look
-  "Обработать команду look"
-  [player-name]
-  (let [room (world/get-player-room player-name)
-        room-name (world/get-room-name room)
-        room-desc (world/get-room-desc room)
-        room-items (world/get-room-items room)
-        room-players (world/get-room-players room)
-        exits (world/get-available-exits room)]
+(defn move-player! [player-name direction]
+  "Переместить игрока"
+  (let [current-room (get-player-room player-name)
+        room-data (get-room current-room)
+        exits (:exits room-data)
+        target-room (get exits (keyword direction))]
     
-    {:type :look
-     :room room-name
-     :description room-desc
-     :items (helpers/format-item-list room-items)
-     :players (helpers/format-player-list (disj room-players player-name))
-     :exits (helpers/format-exits room)}))
-
-(defn handle-move
-  "Обработать перемещение"
-  [player-name direction]
-  (let [result (sync-player-movement player-name direction)]
-    (if result
+    (if target-room
       (do
-        (handle-look player-name))  ;; Показываем новую комнату
+        (set-player-room! player-name target-room)
+        {:success true
+         :from current-room
+         :to target-room
+         :message (str "Вы переместились в " (:name (get-room target-room)))})
       {:error true
        :message "Нельзя пойти в этом направлении"})))
 
-(defn handle-go
-  "Обработать команду go [направление]"
-  [player-name args]
-  (if (empty? args)
-    {:error true
-     :message "Укажите направление: go [север|юг|запад|восток]"}
-    (handle-move player-name (first args))))
 
-(defn handle-inventory
+
+;; УПРАВЛЕНИЕ ПРЕДМЕТАМИ
+
+(defn get-item [item-key]
+  "Получить предмет"
+  (get @items-ref item-key))
+
+(defn get-item-display-name [item-key]
+  "Получить отображаемое имя предмета"
+  (:name (get-item item-key)))
+
+(defn player-has-item? [player-name item-key]
+  "Проверить, есть ли у игрока предмет"
+  (contains? (get-in @players-ref [player-name :inventory]) item-key))
+
+(defn add-to-inventory! [player-name item-key]
+  "Добавить предмет в инвентарь"
+  (dosync
+    (alter players-ref update-in [player-name :inventory] conj item-key)
+    (alter players-ref update-in [player-name :stats :items-taken] inc)
+    
+    (add-log-entry (str player-name " взял " (get-item-display-name item-key)))
+    true))
+
+(defn remove-from-inventory! [player-name item-key]
+  "Удалить предмет из инвентаря"
+  (dosync
+    (alter players-ref update-in [player-name :inventory] disj item-key)
+    
+    (add-log-entry (str player-name " положил " (get-item-display-name item-key)))
+    true))
+
+(defn get-player-inventory [player-name]
+  "Получить инвентарь игрока"
+  (get-in @players-ref [player-name :inventory]))
+
+
+
+
+;; КОМАНДЫ ИГРЫ
+
+(defn handle-look [player-name]
+  "Обработать команду 'осмотреть'"
+  (let [room-key (get-player-room player-name)
+        room-data (get-room room-key)]
+    
+    (when room-data
+      (add-log-entry (str player-name " осмотрел комнату " room-key))
+      
+      {:type :look
+       :room (:name room-data)
+       :description (:desc room-data)
+       :items (map get-item-display-name (:items room-data))
+       :players (vec (disj (get-players-in-room room-key) player-name))
+       :exits (keys (:exits room-data))})))
+
+(defn handle-take [player-name item-pattern]
+  "Взять предмет"
+  (let [room-key (get-player-room player-name)
+        room-data (get-room room-key)
+        room-items (:items room-data)
+        
+        ;; Ищем предмет по паттерну
+        matching-item (first (filter #(str/includes? 
+                                       (str/lower-case (get-item-display-name %)) 
+                                       (str/lower-case item-pattern)) 
+                                     room-items))]
+    
+    (if matching-item
+      (dosync
+        ;; Убираем из комнаты
+        (alter world-ref update-in [:rooms room-key :items] disj matching-item)
+        
+        ;; Добавляем в инвентарь
+        (add-to-inventory! player-name matching-item)
+        
+        {:success true
+         :message (str "Вы взяли: " (get-item-display-name matching-item))
+         :item matching-item})
+      
+      {:error true
+       :message "Такого предмета здесь нет"})))
+
+(defn handle-drop [player-name item-pattern]
+  "Положить предмет"
+  (let [inventory (get-player-inventory player-name)
+        
+        ;; Ищем предмет в инвентаре
+        matching-item (first (filter #(str/includes? 
+                                       (str/lower-case (get-item-display-name %)) 
+                                       (str/lower-case item-pattern)) 
+                                     inventory))]
+    
+    (if matching-item
+      (dosync
+        (let [room-key (get-player-room player-name)]
+          
+          ;; Убираем из инвентаря
+          (remove-from-inventory! player-name matching-item)
+          
+          ;; Добавляем в комнату
+          (alter world-ref update-in [:rooms room-key :items] conj matching-item)
+          
+          {:success true
+           :message (str "Вы положили: " (get-item-display-name matching-item))
+           :item matching-item}))
+      
+      {:error true
+       :message "У вас нет такого предмета"})))
+
+(defn handle-inventory [player-name]
   "Показать инвентарь"
-  [player-name]
-  (let [inv (inventory/list-inventory player-name)]
+  (let [inventory (get-player-inventory player-name)]
     {:type :inventory
      :player player-name
-     :items (:items inv)
-     :total (:total-items inv)
-     :weight (:current-weight inv)
-     :max-weight (:max-weight inv)
-     :capacity (:capacity-percent inv)}))
+     :items (map get-item-display-name inventory)
+     :count (count inventory)}))
 
-(defn handle-take
-  "Взять предмет"
-  [player-name args]
-  (if (empty? args)
-    {:error true
-     :message "Укажите предмет: взять [предмет]"}
-    (let [item-pattern (helpers/unwords args)
-          room (world/get-player-room player-name)
-          item-name (helpers/find-item-in-room room item-pattern)]
-      
-      (if item-name
-        (if (inventory/add-to-inventory! player-name item-name)
-          {:success true
-           :message (str "Вы взяли: " (items/get-item-name item-name))
-           :item item-name}
-          {:error true
-           :message "Не удалось взять предмет"})
-        {:error true
-         :message "Такого предмета здесь нет"}))))
+(defn handle-move [player-name direction]
+  "Переместиться"
+  (move-player! player-name direction))
 
-(defn handle-drop
-  "Положить предмет"
-  [player-name args]
-  (if (empty? args)
-    {:error true
-     :message "Укажите предмет: положить [предмет]"}
-    (let [item-pattern (helpers/unwords args)
-          item-name (helpers/find-item-in-inventory player-name item-pattern)]
-      
-      (if item-name
-        (if (inventory/remove-from-inventory! player-name item-name)
-          {:success true
-           :message (str "Вы положили: " (items/get-item-name item-name))
-           :item item-name}
-          {:error true
-           :message "Не удалось положить предмет"})
-        {:error true
-         :message "У вас нет такого предмета"}))))
-
-(defn handle-examine
-  "Осмотреть предмет"
-  [player-name args]
-  (if (empty? args)
-    {:error true
-     :message "Укажите предмет или 'комната' для осмотра комнаты"}
-    (let [target (helpers/unwords args)]
-      (if (= target "комната")
-        (handle-look player-name)
-        ;; Ищем предмет в инвентаре или комнате
-        (let [inv-item (helpers/find-item-in-inventory player-name target)
-              room-item (helpers/find-item-in-room (world/get-player-room player-name) target)
-              item-name (or inv-item room-item)]
-          
-          (if item-name
-            (let [exam-result (items/examine-item! item-name player-name)]
-              {:type :examine
-               :item item-name
-               :display-name (items/get-item-name item-name)
-               :examination (:examination exam-result)
-               :readable (:readable exam-result)})
-            {:error true
-             :message "Нечего осматривать"}))))))
-
-(defn handle-use
-  "Использовать предмет"
-  [player-name args]
-  (if (empty? args)
-    {:error true
-     :message "Укажите предмет: использовать [предмет]"}
-    (let [item-pattern (helpers/unwords args)
-          item-name (helpers/find-item-in-inventory player-name item-pattern)]
-      
-      (if item-name
-        (let [result (inventory/use-item-from-inventory! player-name item-name)]
-          (if (:success result)
-            {:success true
-             :message (:message result)
-             :item item-name}
-            {:error true
-             :message (:message result)}))
-        {:error true
-         :message "У вас нет такого предмета"}))))
-
-(defn handle-say
+(defn handle-say [player-name message]
   "Сказать что-то в комнате"
-  [player-name args]
-  (if (empty? args)
-    {:error true
-     :message "Скажите что-нибудь: сказать [текст]"}
-    (let [message (helpers/unwords args)
-          room (world/get-player-room player-name)
-          other-players (helpers/get-players-in-same-room player-name)]
-      
-      {:type :say
-       :player player-name
-       :message message
-       :room room
-       :to-players other-players})))
+  (let [room-key (get-player-room player-name)
+        other-players (disj (get-players-in-room room-key) player-name)]
+    
+    (add-log-entry (str player-name " сказал: \"" message "\""))
+    
+    {:type :say
+     :from player-name
+     :message message
+     :room room-key
+     :to-players (vec other-players)}))
 
-(defn handle-help
-  "Показать помощь"
-  [player-name]
+(defn handle-help [player-name]
+  "Показать справку"
   {:type :help
    :commands [
-     "север, юг, запад, восток (или с, ю, з, в) - перемещение"
-     "look (осмотреть) - осмотреть комнату"
+     "север, юг, запад, восток - перемещение"
+     "look или осмотреть - осмотреть комнату"
      "взять [предмет] - взять предмет"
      "положить [предмет] - положить предмет"
      "инвентарь - показать инвентарь"
-     "осмотреть [предмет] - осмотреть предмет"
-     "осмотреть комната - осмотреть комнату"
-     "использовать [предмет] - использовать предмет"
-     "сказать [текст] - сказать в комнате"
+     "сказать [текст] - сказать что-то"
      "помощь - эта справка"
      "статус - ваш статус"
    ]})
 
-(defn handle-status
-  "Показать статус игрока"
-  [player-name]
-  (let [stats (players/get-player-stats player-name)
-        play-time (players/get-player-play-time player-name)
-        room (world/get-player-room player-name)
-        inv-size (inventory/get-inventory-size player-name)]
+(defn handle-status [player-name]
+  "Показать статус"
+  (let [player (get-player player-name)
+        play-time (/ (- (System/currentTimeMillis) (:joined-at player)) 1000.0)
+        stats (:stats player)]
     
     {:type :status
      :player player-name
-     :room (world/get-room-name room)
-     :play-time (format "%.1f" play-time)
+     :room (:name (get-room (:room player)))
+     :play-time (format "%.1f сек" play-time)
      :commands (:commands-executed stats 0)
-     :items-taken (:items-taken stats 0)
+     :items (:items-taken stats 0)
      :rooms-visited (count (:rooms-visited stats))
-     :inventory-size inv-size}))
+     :inventory-count (count (:inventory player))}))
 
-(defn handle-mire-command
-  "Обработать команду через оригинальный Mire"
-  [player-name input]
-  ;; Пробуем выполнить через оригинальную систему Mire
-  (try
-    (let [result (mire-commands/execute-command player-name input)]
-      {:type :mire
-       :result result})
-    (catch Exception e
-      {:error true
-       :message "Неизвестная команда. Введите 'помощь' для списка команд."})))
+(defn handle-command [player-name input]
+  "Обработать команду игрока"
+  (dosync
+    (try
+      ;; Обновляем статистику команд
+      (alter players-ref update-in [player-name :stats :commands-executed] inc)
+      (alter players-ref assoc-in [player-name :last-action] (System/currentTimeMillis))
+      
+      ;; Парсим команду
+      (let [parts (str/split input #" ")
+            command (str/lower-case (first parts))
+            args (str/join " " (rest parts))]
+        
+        (cond
+          ;; Перемещение
+          (#{"север" "юг" "запад" "восток" "north" "south" "west" "east"} command)
+          (handle-move player-name command)
+          
+          ;; Осмотр
+          (#{"look" "осмотреть" "посмотреть"} command)
+          (handle-look player-name)
+          
+          ;; Взять предмет
+          (#{"взять" "take" "поднять"} command)
+          (handle-take player-name args)
+          
+          ;; Положить предмет
+          (#{"положить" "drop" "бросить"} command)
+          (handle-drop player-name args)
+          
+          ;; Инвентарь
+          (#{"инвентарь" "inventory" "инв"} command)
+          (handle-inventory player-name)
+          
+          ;; Сказать
+          (#{"сказать" "say" "говорить"} command)
+          (handle-say player-name args)
+          
+          ;; Помощь
+          (#{"помощь" "help" "справка"} command)
+          (handle-help player-name)
+          
+          ;; Статус
+          (#{"статус" "status"} command)
+          (handle-status player-name)
+          
+          ;; Неизвестная команда
+          :else
+          {:error true
+           :message "Неизвестная команда. Введите 'помощь' для списка команд."}))
+      
+      (catch Exception e
+        (println "[ERROR] Ошибка в команде:" input e)
+        {:error true
+         :message "Ошибка выполнения команды"}))))
+
+
 
 ;; УПРАВЛЕНИЕ ИГРОЙ
-(defn start-game
+
+(defn init-game []
+  "Инициализировать игру"
+  (println "ИНИЦИАЛИЗАЦИЯ ИГРЫ 'ПОБЕГ ИЗ ЛАБОРАТОРИИ'")
+  
+  ;; Загружаем ресурсы
+  (load-russian-rooms)
+  (load-items)
+  
+  ;; Устанавливаем флаги
+  (swap! game-state assoc 
+         :initialized true
+         :start-time (System/currentTimeMillis)
+         :running true)
+  
+  (println "Игра инициализирована")
+  (println "   Комнат:" (count (get-all-rooms)))
+  (println "   Предметов:" (count (keys @items-ref)))
+  true)
+
+(defn start-game []
   "Запустить игру"
-  []
-  (dosync
-    (when-not (:running @game-state)
-      (init-all-systems)
-      (alter game-state assoc :running true)
-      (println "[GAME] Игра запущена"))
-    true))
+  (if (:running @game-state)
+    (do
+      (println "[WARN] Игра уже запущена")
+      false)
+    (do
+      (init-game)
+      true)))
 
-(defn stop-game
+(defn stop-game []
   "Остановить игру"
-  []
-  (dosync
-    (when (:running @game-state)
-      (println "[GAME] Остановка игры...")
-      
-      ;; Отключаем всех игроков
-      (doseq [player-name (world/get-all-players)]
-        (players/disconnect-player! player-name))
-      
-      (alter game-state assoc :running false)
-      (println "[GAME] Игра остановлена"))
-    true))
+  (swap! game-state assoc :running false)
+  (println "Игра остановлена!")
+  true)
 
-(defn reset-game
-  "Сбросить игру к начальному состоянию"
-  []
-  (dosync
-    (println "[GAME] Сброс игры...")
-    (stop-game)
-    
-    ;; Сбрасываем мир
-    (world/reset-world!)
-    
-    ;; Сбрасываем статистику игроков
-    (players/reset-all-stats!)
-    
-    ;; Сбрасываем инвентари
-    ;; (нужно добавить функцию сброса инвентарей)
-    
-    (println "[GAME] Игра сброшена")
-    true))
-
-(defn get-game-status
-  "Получить статус игры"
-  []
-  (let [state @game-state
-        players-count (count (world/get-all-players))]
-    
-    {:running (:running state)
+(defn get-game-info []
+  "Получить информацию об игре"
+  (let [state @game-state]
+    {:status (if (:running state) "запущена" "остановлена")
      :uptime (if (:start-time state)
-               (helpers/elapsed-time (:start-time state))
-               0)
-     :players players-count
+               (format "%.1f сек" (/ (- (System/currentTimeMillis) (:start-time state)) 1000.0))
+               "0 сек")
+     :players (:active-players state)
      :max-players (:max-players state)
-     :mode (:game-mode state)
-     :difficulty (:difficulty state)
-     :cycle (:current-cycle state)}))
+     :mode (:mode state)
+     :log-entries (count (:log state))}))
 
-;; ТОЧКА ВХОДА
-(defn -main
-  "Главная функция для запуска игры"
-  [& args]
-  (println "Запуск игры...")
-  (println "STM кооперативная игра 'Побег из лаборатории'")
-  (println "==============================================")
+
+
+;; ТЕСТОВЫЕ ФУНКЦИИ
+
+(defn test-game []
+  "Тестирование игры"
+  (println "\nТЕСТИРОВАНИЕ ИГРЫ")
   
   (start-game)
   
-  (println "\nИгра готова к подключению игроков.")
-  (println "Для выхода нажмите Ctrl+C")
+  ;; Тест 1: Добавление игрока
+  (println "\n1. Добавление игрока:")
+  (println (add-player! "ТестовыйИгрок"))
   
-  ;; Для тестирования в REPL
-  (when (some #{"--test"} args)
-    (println "\n=== ТЕСТОВЫЙ РЕЖИМ ===")
-    (integrate-mire-player "ТестовыйИгрок")
-    
-    ;; Пример тестовых команд
-    (println (handle-command "ТестовыйИгрок" "look"))
-    (println (handle-command "ТестовыйИгрок" "взять ключ"))
-    (println (handle-command "ТестовыйИгрок" "инвентарь")))
+  ;; Тест 2: Осмотр комнаты
+  (println "\n2. Осмотр комнаты:")
+  (println (handle-look "ТестовыйИгрок"))
   
-  ;; Держим приложение запущенным
-  (while (:running @game-state)
-    (Thread/sleep 1000)
-    (dosync
-      (alter game-state update :current-cycle inc))))
+  ;; Тест 3: Взятие предмета (если есть в комнате)
+  (println "\n3. Взятие предмета:")
+  (let [room (get-room :laboratory)
+        items (:items room)]
+    (when (seq items)
+      (let [item (first items)]
+        (println (handle-take "ТестовыйИгрок" (get-item-display-name item))))))
+  
+  ;; Тест 4: Инвентарь
+  (println "\n4. Показать инвентарь:")
+  (println (handle-inventory "ТестовыйИгрок"))
+  
+  ;; Тест 5: Статус
+  (println "\n5. Статус игрока:")
+  (println (handle-status "ТестовыйИгрок"))
+  
+  ;; Тест 6: Информация об игре
+  (println "\n6. Информация об игре:")
+  (println (get-game-info))
+  
+  (println "\nТестирование завершено"))
 
-;; ЭКСПОРТ
-(defn init-core
-  "Инициализировать ядро игры"
-  []
-  (println "[CORE] Ядро игры инициализировано"))
 
-(init-core)
 
-;; Для работы с REPL
+
+;; ТОЧКА ВХОДА
+
+(defn -main
+  "Главная функция запуска игры"
+  [& args]
+  (println "ЗАПУСК STM ИГРЫ НА CLOJURE")
+  
+  ;; Проверяем аргументы
+  (if (some #{"--test"} args)
+    (test-game)
+    (do
+      (start-game)
+      
+      (println "\nИгра запущена и готова к подключению!")
+      (println "   Используйте --test для тестового режима")
+      (println "\nИгра работает... (Ctrl+C для выхода)")
+      
+      ;; Основной цикл
+      (while (:running @game-state)
+        (Thread/sleep 1000)
+        ;; Можно добавить периодические задачи здесь
+        
+        )))
+  
+  (println "\nЗавершение работы игры"))
+
+;; Автоматическая инициализация при загрузке
+(println "[CORE] Модуль core.clj загружен")
+
+;; Для работы в REPL
 (comment
   ;; Запустить игру
   (start-game)
   
-  ;; Добавить тестового игрока
-  (integrate-mire-player "Алексей")
+  ;; Добавить игрока
+  (add-player! "Алексей")
   
   ;; Выполнить команды
-  (handle-command "Алексей" "look")
+  (handle-command "Алексей" "осмотреть")
   (handle-command "Алексей" "взять ключ-карта")
   (handle-command "Алексей" "инвентарь")
+  (handle-command "Алексей" "помощь")
   
-  ;; Проверить статус игры
-  (get-game-status)
+  ;; Получить информацию
+  (get-game-info)
   
   ;; Остановить игру
   (stop-game)
+  
+  ;; Запустить тесты
+  (test-game)
 )
