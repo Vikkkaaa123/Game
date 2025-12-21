@@ -1,0 +1,16 @@
+{
+  :name "Лаборатория"
+  :desc "Вы находитесь в заброшенной лаборатории. Вокруг разбросано оборудование, стены исписаны химическими формулами. На центральном столе стоит электронный микроскоп, рядом валяются провода."
+  :exits {
+    :north :hallway
+  }
+  :items #{"keycard" "microscope" "wire"}
+  :players #{}
+  :puzzle {
+    :type :microscope-puzzle
+    :solved false
+    :hint "Посмотрите в микроскоп - на слайде есть подсказка"
+    :required-item "microscope"
+  }
+  :locked-exits #{}
+}
