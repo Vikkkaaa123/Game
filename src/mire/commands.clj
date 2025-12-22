@@ -93,25 +93,35 @@
 ;; Command data
 
 (def commands {"move" move,
-               "north" (fn [] (move :north)),
-               "south" (fn [] (move :south)),
-               "east" (fn [] (move :east)),
-               "west" (fn [] (move :west)),
-               "grab" grab
-               "discard" discard
-               "inventory" inventory
-               "detect" detect
-               "look" look
-               "say" say
+               "north" (fn [& _] (move :north)),    ; ← Принимает аргументы
+               "south" (fn [& _] (move :south)),
+               "east" (fn [& _] (move :east)),
+               "west" (fn [& _] (move :west)),
+               "grab" grab,                         ; ← ДОБАВЛЕНА ЗАПЯТАЯ!
+               "discard" discard,
+               "inventory" inventory,
+               "detect" detect,
+               "look" look,
+               "say" say,
                "help" help})
 
-;; Command handling
-
+;; УЛУЧШЕННАЯ функция execute:
 (defn execute
   "Execute a command that is passed to us."
   [input]
-  (try (let [[command & args] (.split input " +")]
-         (apply (commands command) args))
-       (catch Exception e
-         (.printStackTrace e (new java.io.PrintWriter *err*))
-         "You can't do that!")))
+  (try 
+    (let [tokens (str/split input #"\s+")
+          command (first tokens)
+          args (rest tokens)]
+      (if-let [cmd-fn (commands command)]
+        (apply cmd-fn args)
+        "Неизвестная команда. Введите 'help' для списка команд."))
+    (catch Exception e
+      (str "Ошибка выполнения: " (.getMessage e)))))
+
+(defn debug-commands []
+  (println "Доступные команды:" (keys commands))
+  (println "Команда 'look':" (commands "look"))
+  (println "Команда 'help':" (commands "help")))
+  
+(debug-commands)

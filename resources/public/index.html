@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Побег из лаборатории</title>
+		<style>
+			:root {
+				--bg-dark: #0f172a;
+				--bg-panel: #1e293b;
+				--border: #334155;
+				--text: #e2e8f0;
+				--text-secondary: #94a3b8;
+				--accent: #3b82f6;
+				--success: #10b981;
+				--error: #ef4444;
+				--warning: #f59e0b;
+			}
+
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+					sans-serif;
+				background: var(--bg-dark);
+				color: var(--text);
+				line-height: 1.5;
+				padding: 20px;
+				height: 100vh;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+			}
+
+			.container {
+				width: 100%;
+				max-width: 1200px;
+				height: 90vh;
+				display: flex;
+				flex-direction: column;
+				gap: 20px;
+			}
+
+			.header {
+				text-align: center;
+				padding-bottom: 20px;
+				border-bottom: 1px solid var(--border);
+			}
+
+			.game-title {
+				color: var(--accent);
+				font-size: 2rem;
+				font-weight: 700;
+				margin-bottom: 8px;
+			}
+
+			.subtitle {
+				color: var(--text-secondary);
+				font-size: 1rem;
+			}
+
+			.status-bar {
+				display: flex;
+				gap: 30px;
+				padding: 12px 20px;
+				background: var(--bg-panel);
+				border-radius: 8px;
+				border: 1px solid var(--border);
+				font-size: 0.9rem;
+			}
+
+			.status-item {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			}
+
+			.status-icon {
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				display: inline-block;
+			}
+
+			.status-icon.connected {
+				background: var(--success);
+				box-shadow: 0 0 8px var(--success);
+			}
+
+			.status-icon.disconnected {
+				background: var(--error);
+			}
+
+			.status-icon.connecting {
+				background: var(--warning);
+				animation: pulse 1.5s infinite;
+			}
+
+			@keyframes pulse {
+				0%,
+				100% {
+					opacity: 1;
+				}
+				50% {
+					opacity: 0.5;
+				}
+			}
+
+			.game-area {
+				flex: 1;
+				display: flex;
+				gap: 20px;
+				min-height: 0;
+			}
+
+			.output-panel {
+				flex: 3;
+				background: var(--bg-panel);
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 20px;
+				overflow-y: auto;
+				display: flex;
+				flex-direction: column;
+				gap: 10px;
+			}
+
+			.sidebar {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				gap: 20px;
+				min-width: 250px;
+			}
+
+			.sidebar-panel {
+				background: var(--bg-panel);
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 15px;
+			}
+
+			.panel-title {
+				color: var(--accent);
+				font-size: 1rem;
+				font-weight: 600;
+				margin-bottom: 10px;
+				padding-bottom: 8px;
+				border-bottom: 1px solid var(--border);
+			}
+
+			.commands-grid {
+				display: grid;
+				grid-template-columns: repeat(2, 1fr);
+				gap: 8px;
+				margin-top: 10px;
+			}
+
+			.command-item {
+				padding: 6px 10px;
+				background: rgba(59, 130, 246, 0.1);
+				border: 1px solid rgba(59, 130, 246, 0.2);
+				border-radius: 4px;
+				font-size: 0.85rem;
+			}
+
+			.players-list,
+			.inventory-list {
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+			}
+
+			.player-item,
+			.inventory-item {
+				padding: 8px 10px;
+				background: rgba(255, 255, 255, 0.05);
+				border-radius: 4px;
+				font-size: 0.9rem;
+			}
+
+			.input-area {
+				margin-top: 10px;
+			}
+
+			.input-group {
+				display: flex;
+				gap: 10px;
+			}
+
+			#command-input,
+			#name-input {
+				flex: 1;
+				padding: 12px;
+				background: var(--bg-panel);
+				border: 1px solid var(--border);
+				border-radius: 6px;
+				color: var(--text);
+				font-family: inherit;
+				font-size: 1rem;
+				outline: none;
+			}
+
+			#command-input:focus,
+			#name-input:focus {
+				border-color: var(--accent);
+			}
+
+			.btn {
+				padding: 12px 24px;
+				background: var(--accent);
+				color: white;
+				border: none;
+				border-radius: 6px;
+				font-family: inherit;
+				font-size: 1rem;
+				cursor: pointer;
+				font-weight: 500;
+				transition: background 0.2s;
+			}
+
+			.btn:hover {
+				background: #2563eb;
+			}
+
+			.btn:disabled {
+				background: var(--text-secondary);
+				cursor: not-allowed;
+			}
+
+			.message {
+				padding: 8px 0;
+				animation: fadeIn 0.2s ease;
+			}
+
+			.message.system {
+				color: var(--text-secondary);
+			}
+
+			.message.error {
+				color: var(--error);
+			}
+
+			.message.success {
+				color: var(--success);
+			}
+
+			.message.command {
+				color: var(--accent);
+				font-style: italic;
+			}
+
+			@keyframes fadeIn {
+				from {
+					opacity: 0;
+				}
+				to {
+					opacity: 1;
+				}
+			}
+
+			.connection-status {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				padding: 6px 12px;
+				border-radius: 20px;
+				font-size: 0.85rem;
+				background: rgba(59, 130, 246, 0.1);
+				border: 1px solid rgba(59, 130, 246, 0.2);
+			}
+
+			#registration-section .input-group {
+				flex-direction: column;
+				align-items: stretch;
+			}
+
+			#registration-section #name-input {
+				margin-bottom: 10px;
+			}
+
+			.hidden {
+				display: none;
+			}
+
+			.output-panel::-webkit-scrollbar {
+				width: 8px;
+			}
+
+			.output-panel::-webkit-scrollbar-track {
+				background: var(--bg-panel);
+			}
+
+			.output-panel::-webkit-scrollbar-thumb {
+				background: var(--border);
+				border-radius: 4px;
+			}
+
+			@media (max-width: 768px) {
+				.game-area {
+					flex-direction: column;
+				}
+
+				.sidebar {
+					min-width: auto;
+				}
+
+				.commands-grid {
+					grid-template-columns: 1fr;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="header">
+				<h1 class="game-title">ПОБЕГ ИЗ ЛАБОРАТОРИИ</h1>
+				<p class="subtitle">Кооперативная текстовая игра на Clojure</p>
+				<div class="connection-status" id="connection-status">
+					<span class="status-icon connecting"></span>
+					<span id="status-text">Подключение...</span>
+				</div>
+			</div>
+
+			<div class="status-bar">
+				<div class="status-item">
+					<span>Игрок: <span id="player-name">Не авторизован</span></span>
+				</div>
+				<div class="status-item">
+					<span>Онлайн: <span id="online-count">0</span></span>
+				</div>
+				<div class="status-item">
+					<span>Комнат: <span id="rooms-count">5</span></span>
+				</div>
+			</div>
+
+			<div class="game-area">
+				<div class="output-panel" id="output-panel">
+					<div class="message system">
+						Добро пожаловать в игру "Побег из лаборатории"!
+					</div>
+					<div class="message system">
+						Для начала введите ваше имя и нажмите "Начать игру".
+					</div>
+				</div>
+
+				<div class="sidebar">
+					<div class="sidebar-panel">
+						<div class="panel-title">Игроки в комнате</div>
+						<div class="players-list" id="players-list">
+							<div class="player-item">Загрузка...</div>
+						</div>
+					</div>
+
+					<div class="sidebar-panel">
+						<div class="panel-title">Ваш инвентарь</div>
+						<div class="inventory-list" id="inventory-list">
+							<div class="inventory-item">Пусто</div>
+						</div>
+					</div>
+
+					<div class="sidebar-panel">
+						<div class="panel-title">Команды</div>
+						<div class="commands-grid">
+							<div class="command-item">look</div>
+							<div class="command-item">north/south</div>
+							<div class="command-item">take [предмет]</div>
+							<div class="command-item">drop [предмет]</div>
+							<div class="command-item">inventory</div>
+							<div class="command-item">help</div>
+							<div class="command-item">say [текст]</div>
+							<div class="command-item">exit</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="input-area">
+				<div id="registration-section">
+					<div class="input-group">
+						<input
+							type="text"
+							id="name-input"
+							placeholder="Введите имя игрока"
+							autocomplete="off"
+						/>
+						<button class="btn" id="register-btn">Начать игру</button>
+					</div>
+				</div>
+
+				<div id="game-section" class="hidden">
+					<div class="input-group">
+						<input
+							type="text"
+							id="command-input"
+							placeholder="Введите команду..."
+							autocomplete="off"
+						/>
+						<button class="btn" id="send-btn">Отправить</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			// Конфигурация
+			const CONFIG = {
+				WS_URL: "ws://" + window.location.hostname + ":8080/ws",
+				RECONNECT_DELAY: 3000,
+				PLAYER_NAME_MAX: 20,
+				PLAYER_NAME_MIN: 2,
+			};
+
+			// Состояние приложения
+			const AppState = {
+				ws: null,
+				playerName: "",
+				isConnected: false,
+				registered: false,
+				reconnectAttempts: 0,
+				maxReconnectAttempts: 5,
+			};
+
+			// DOM элементы
+			const elements = {
+				output: document.getElementById("output-panel"),
+				nameInput: document.getElementById("name-input"),
+				commandInput: document.getElementById("command-input"),
+				registerBtn: document.getElementById("register-btn"),
+				sendBtn: document.getElementById("send-btn"),
+				statusIcon: document.querySelector(".status-icon"),
+				statusText: document.getElementById("status-text"),
+				playerNameSpan: document.getElementById("player-name"),
+				onlineCount: document.getElementById("online-count"),
+				roomsCount: document.getElementById("rooms-count"),
+				playersList: document.getElementById("players-list"),
+				inventoryList: document.getElementById("inventory-list"),
+				registrationSection: document.getElementById("registration-section"),
+				gameSection: document.getElementById("game-section"),
+				connectionStatus: document.getElementById("connection-status"),
+			};
+
+			// ========== ОСНОВНЫЕ ФУНКЦИИ ==========
+
+			// Обновление статуса подключения
+			function updateConnectionStatus(status, message) {
+				const statusMap = {
+					connecting: {
+						class: "connecting",
+						color: "var(--warning)",
+						text: "Подключение...",
+					},
+					connected: {
+						class: "connected",
+						color: "var(--success)",
+						text: "Подключено",
+					},
+					disconnected: {
+						class: "disconnected",
+						color: "var(--error)",
+						text: "Отключено",
+					},
+					error: {
+						class: "disconnected",
+						color: "var(--error)",
+						text: "Ошибка подключения",
+					},
+				};
+
+				const statusInfo = statusMap[status] || statusMap.disconnected;
+
+				// Обновляем иконку
+				elements.statusIcon.className = "status-icon " + statusInfo.class;
+				elements.statusIcon.style.background = statusInfo.color;
+
+				// Обновляем текст
+				elements.statusText.textContent = message || statusInfo.text;
+				elements.statusText.style.color = statusInfo.color;
+
+				// Обновляем рамку
+				elements.connectionStatus.style.borderColor = statusInfo.color;
+				elements.connectionStatus.style.background = statusInfo.color + "10";
+
+				// Обновляем состояние
+				AppState.isConnected = status === "connected";
+			}
+
+			// Логирование сообщений
+			function logMessage(text, type = "normal") {
+				const messageDiv = document.createElement("div");
+				messageDiv.className = `message ${type}`;
+				messageDiv.textContent = text;
+				elements.output.appendChild(messageDiv);
+				elements.output.scrollTop = elements.output.scrollHeight;
+			}
+
+			// Подключение к WebSocket
+			function connectWebSocket() {
+				if (AppState.reconnectAttempts >= AppState.maxReconnectAttempts) {
+					logMessage("Не удалось подключиться к серверу", "error");
+					updateConnectionStatus("error", "Сервер недоступен");
+					return;
+				}
+
+				updateConnectionStatus("connecting", "Подключение к серверу...");
+
+				try {
+					AppState.ws = new WebSocket(CONFIG.WS_URL);
+
+					AppState.ws.onopen = function () {
+						AppState.isConnected = true;
+						AppState.reconnectAttempts = 0;
+						updateConnectionStatus("connected", "Подключено к серверу");
+						logMessage("Соединение с сервером установлено", "success");
+
+						// Автоматическая перерегистрация при переподключении
+						if (AppState.registered && AppState.playerName) {
+							setTimeout(() => {
+								registerPlayer(AppState.playerName, true);
+							}, 500);
+						}
+					};
+
+					AppState.ws.onmessage = function (event) {
+						try {
+							const data = JSON.parse(event.data);
+							handleWebSocketMessage(data);
+						} catch (error) {
+							logMessage("Ошибка обработки сообщения: " + error, "error");
+						}
+					};
+
+					AppState.ws.onerror = function (error) {
+						logMessage("Ошибка соединения с сервером", "error");
+						updateConnectionStatus("error", "Ошибка подключения");
+					};
+
+					AppState.ws.onclose = function () {
+						AppState.isConnected = false;
+						updateConnectionStatus("disconnected", "Соединение потеряно");
+
+						if (AppState.registered) {
+							logMessage("Потеряно соединение с сервером", "warning");
+							AppState.reconnectAttempts++;
+
+							if (AppState.reconnectAttempts < AppState.maxReconnectAttempts) {
+								const delay = Math.min(
+									1000 * Math.pow(2, AppState.reconnectAttempts),
+									10000
+								);
+								logMessage(
+									`Переподключение через ${delay / 1000} сек...`,
+									"system"
+								);
+
+								setTimeout(() => {
+									connectWebSocket();
+								}, delay);
+							}
+						}
+					};
+				} catch (error) {
+					logMessage("Ошибка создания соединения: " + error, "error");
+					updateConnectionStatus("error", "Ошибка создания соединения");
+				}
+			}
+
+			// Обработка входящих сообщений
+			function handleWebSocketMessage(data) {
+				switch (data.type) {
+					case "welcome":
+						logMessage(data.message || "Добро пожаловать!", "system");
+						break;
+
+					case "registered":
+						handleRegistrationResponse(data);
+						break;
+
+					case "command-response":
+						handleCommandResponse(data);
+						break;
+
+					case "error":
+						logMessage(data.message, "error");
+						break;
+
+					default:
+						logMessage(
+							"Неизвестный тип сообщения: " + JSON.stringify(data),
+							"warning"
+						);
+				}
+			}
+
+			// Обработка ответа на регистрацию
+			function handleRegistrationResponse(data) {
+				if (data.error) {
+					logMessage(data.message, "error");
+				} else {
+					AppState.registered = true;
+					AppState.playerName = data.player || AppState.playerName;
+
+					// Обновляем интерфейс
+					elements.playerNameSpan.textContent = AppState.playerName;
+					elements.registrationSection.classList.add("hidden");
+					elements.gameSection.classList.remove("hidden");
+					elements.commandInput.focus();
+
+					logMessage(
+						`Игрок "${AppState.playerName}" успешно зарегистрирован`,
+						"success"
+					);
+
+					// Обновляем состояние игры
+					if (data.gameState) {
+						updateGameState(data.gameState);
+					}
+
+					// Автоматически отправляем look
+					setTimeout(() => {
+						sendGameCommand("look");
+					}, 500);
+				}
+			}
+
+			// Обработка ответа на команду
+			function handleCommandResponse(data) {
+				if (data.result && data.result.message) {
+					const lines = data.result.message.split("\n");
+					lines.forEach((line) => {
+						if (line.trim()) {
+							const type = data.result.error ? "error" : "normal";
+							logMessage(line, type);
+						}
+					});
+				}
+
+				// Обновляем состояние игры
+				if (data.gameState) {
+					updateGameState(data.gameState);
+				}
+			}
+
+			// Обновление состояния игры
+			function updateGameState(gameState) {
+				if (!gameState || gameState.error) {
+					return;
+				}
+
+				// Обновление списка игроков
+				if (gameState.room && gameState.room.players) {
+					updatePlayersList(gameState.room.players);
+				}
+
+				// Обновление инвентаря
+				if (gameState.player && gameState.player.inventory) {
+					updateInventoryList(gameState.player.inventory);
+				}
+
+				// Обновление статистики
+				if (gameState.room) {
+					const playerCount = gameState.room.players
+						? gameState.room.players.size
+						: 0;
+					elements.onlineCount.textContent = playerCount;
+				}
+			}
+
+			// Обновление списка игроков
+			function updatePlayersList(players) {
+				if (!players || !players.size) {
+					elements.playersList.innerHTML =
+						'<div class="player-item">В комнате никого нет</div>';
+					return;
+				}
+
+				const playersArray = Array.from(players).filter(
+					(p) => p !== AppState.playerName
+				);
+
+				if (playersArray.length === 0) {
+					elements.playersList.innerHTML =
+						'<div class="player-item">Вы один в комнате</div>';
+					return;
+				}
+
+				elements.playersList.innerHTML = playersArray
+					.map((player) => `<div class="player-item">${player}</div>`)
+					.join("");
+			}
+
+			// Обновление инвентаря
+			function updateInventoryList(inventory) {
+				if (!inventory || !inventory.size) {
+					elements.inventoryList.innerHTML =
+						'<div class="inventory-item">Пусто</div>';
+					return;
+				}
+
+				elements.inventoryList.innerHTML = Array.from(inventory)
+					.map((item) => `<div class="inventory-item">${item}</div>`)
+					.join("");
+			}
+
+			// Регистрация игрока
+			function registerPlayer(name, isReconnect = false) {
+				const playerName = name || elements.nameInput.value.trim();
+
+				// Валидация имени
+				if (!playerName) {
+					logMessage("Введите имя игрока", "error");
+					elements.nameInput.focus();
+					return;
+				}
+
+				if (
+					playerName.length < CONFIG.PLAYER_NAME_MIN ||
+					playerName.length > CONFIG.PLAYER_NAME_MAX
+				) {
+					logMessage(
+						`Имя должно быть от ${CONFIG.PLAYER_NAME_MIN} до ${CONFIG.PLAYER_NAME_MAX} символов`,
+						"error"
+					);
+					return;
+				}
+
+				if (!isReconnect) {
+					AppState.playerName = playerName;
+					logMessage(`Регистрация игрока "${playerName}"...`, "system");
+				}
+
+				// Отправляем запрос регистрации
+				sendWebSocketMessage({
+					type: "register",
+					content: playerName,
+				});
+			}
+
+			// Отправка игровой команды
+			function sendGameCommand(command) {
+				if (!command) {
+					command = elements.commandInput.value.trim();
+					if (!command) {
+						return;
+					}
+					elements.commandInput.value = "";
+				}
+
+				if (!AppState.registered) {
+					logMessage("Сначала зарегистрируйтесь", "error");
+					return;
+				}
+
+				logMessage(`> ${command}`, "command");
+
+				sendWebSocketMessage({
+					type: "command",
+					player: AppState.playerName,
+					content: command,
+				});
+			}
+
+			// Отправка сообщения через WebSocket
+			function sendWebSocketMessage(message) {
+				if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
+					logMessage("Нет соединения с сервером", "error");
+					connectWebSocket();
+					return false;
+				}
+
+				try {
+					AppState.ws.send(JSON.stringify(message));
+					return true;
+				} catch (error) {
+					logMessage(`Ошибка отправки сообщения: ${error}`, "error");
+					return false;
+				}
+			}
+
+			// Обработчики событий
+			function setupEventListeners() {
+				// Регистрация
+				elements.registerBtn.addEventListener("click", () => registerPlayer());
+				elements.nameInput.addEventListener("keypress", function (e) {
+					if (e.key === "Enter") {
+						registerPlayer();
+					}
+				});
+
+				// Отправка команды
+				elements.sendBtn.addEventListener("click", () => sendGameCommand());
+				elements.commandInput.addEventListener("keypress", function (e) {
+					if (e.key === "Enter") {
+						sendGameCommand();
+					}
+				});
+
+				// Автофокус
+				document.addEventListener("click", function () {
+					if (AppState.registered) {
+						elements.commandInput.focus();
+					} else {
+						elements.nameInput.focus();
+					}
+				});
+
+				// Горячие клавиши
+				document.addEventListener("keydown", function (e) {
+					// Ctrl+L - очистка экрана
+					if (e.ctrlKey && e.key === "l") {
+						e.preventDefault();
+						elements.output.innerHTML = "";
+						logMessage("Экран очищен", "system");
+					}
+
+					// Escape - очистка поля ввода
+					if (e.key === "Escape") {
+						elements.commandInput.value = "";
+					}
+				});
+			}
+
+			// Инициализация приложения
+			function initApp() {
+				logMessage("Инициализация игрового клиента...", "system");
+
+				setupEventListeners();
+				connectWebSocket();
+
+				// Фокус на поле ввода имени
+				elements.nameInput.focus();
+
+				logMessage("Готово к работе. Введите имя для начала игры.", "system");
+			}
+
+			// Запуск при загрузке страницы
+			document.addEventListener("DOMContentLoaded", initApp);
+		</script>
+	</body>
+</html>

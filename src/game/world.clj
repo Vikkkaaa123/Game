@@ -140,6 +140,11 @@
   [player-name]
   (get-in @world-state [:players player-name]))
 
+(defn player-exists?
+  "Проверить, существует ли игрок"
+  [player-name]
+  (boolean (get-player player-name)))
+
 (defn get-player-room
   "Получить комнату игрока"
   [player-name]

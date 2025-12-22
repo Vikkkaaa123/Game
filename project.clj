@@ -8,12 +8,41 @@
     
     ;; Оригинальные зависимости Mire
     [org.clojure/tools.cli "1.0.219"]
-    
-    ;; Для WebSocket сервера (человек 3)
-    [http-kit "2.7.0"]
+    [server-socket "1.0.0"]
     
     ;; Для JSON (веб-интерфейс)
     [cheshire "5.12.0"]
+
+    [http-kit "2.7.0"]
+    [compojure "1.6.2"]
+    [ring/ring-core "1.12.0"]
+    [ring/ring-defaults "0.4.0"]
+    [ring/ring-json "0.5.1"]
+
+    [org.clojure/tools.logging "1.2.4"]
+    [ch.qos.logback/logback-classic "1.4.14"]
+    
+    ;; Для JSON
+    [cheshire "5.12.0"]
+    [ring-cors "0.1.13"]
+    
+    ;; Для шаблонов
+    [hiccup "2.0.0-RC2"]
+
+    [org.clojure/clojure "1.11.1"]
+    [org.clojure/tools.cli "1.0.219"]
+    [server-socket "1.0.0"]
+    [http-kit "2.7.0"]
+    [cheshire "5.12.0"]
+    [compojure "1.6.2"]
+    [ring/ring-core "1.12.0"]
+    [ring/ring-defaults "0.4.0"]
+    [org.clojure/tools.logging "1.2.4"]
+
+    [server-socket "1.0.0"] ; Для telnet-сервера
+    [http-kit "2.5.3"]      ; Для веб-сервера[citation:1][citation:5]
+    [cheshire "5.12.0"]     ; Для работы с JSON
+    [compojure "1.6.2"]
   ]
   
   ;; Исходные пути - ОЧЕНЬ ВАЖНО!
@@ -23,7 +52,7 @@
   :resource-paths ["resources"]
   
   ;; Главный класс для запуска
-  :main mire.server
+  :main game.server.unified
   
   ;; Минимальная версия Leiningen
   :min-lein-version "2.0.0"
@@ -56,6 +85,7 @@
     "-Xmx1g"
     "-XX:+UseG1GC"
     "-Dfile.encoding=UTF-8"
+    "-Dconsole.encoding=UTF-8"
     "-Dsun.jnu.encoding=UTF-8"
     "-Djava.awt.headless=true"
   ]
