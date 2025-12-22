@@ -4,7 +4,7 @@
   :exits {
     :west :hallway
   }
-  :items #{"console"}
+  :items #{:console}
   :players #{}
   :puzzle {
     :type :repair-console

@@ -4,7 +4,7 @@
   :exits {
     :east :hallway
   }
-  :items #{"journal" "formulas"}
+  :items #{:journal :formulas}
   :players #{}
   :puzzle {
     :type :find-date

@@ -84,19 +84,24 @@
             "Ваш инвентарь пуст"))
         
         ;; 5. ПЕРЕМЕЩЕНИЕ
+        ;; 5. ПЕРЕМЕЩЕНИЕ
         (and command (contains? #{"идти" "go" "g"} command))
         (if (str/blank? args)
           "Укажите направление: идти [север/юг/запад/восток]"
           (let [direction-map {"север" :north "юг" :south "запад" :west "восток" :east
-                               "north" :north "south" :south "west" :west "east" :east}
+                              "north" :north "south" :south "west" :west "east" :east}
                 direction (get direction-map (str/lower-case args))
                 current-room (world/get-player-room player-name)
                 target-room (when direction (world/get-exit-room current-room direction))]
+            
+            (println "[DEBUG] Перемещение:" current-room "->" direction "->" target-room)
+            
             (if target-room
               (do
                 (world/set-player-room! player-name target-room)
                 (handle-command player-name "look"))
-              "Нельзя пойти в этом направлении")))
+              (str "Нельзя пойти в этом направлении. Доступные направления: "
+                  (keys (world/get-room-exits current-room))))))
         
         ;; 6. КОРОТКИЕ КОМАНДЫ ДВИЖЕНИЯ
         (and command (contains? #{"с" "север" "north" "n"} command))
@@ -113,13 +118,13 @@
         
         ;; 7. СКАЗАТЬ В КОМНАТЕ
         (and command (contains? #{"сказать" "say" "с"} command))
-            (if (str/blank? args)
-              "Скажите что-нибудь: сказать [текст]"
-              ;; Вместо возврата строки, возвращаем структуру для API
-              {:type :chat-message
-              :from player-name
-              :message args
-              :action :broadcast})
+          (if (str/blank? args)
+            "Скажите что-нибудь: сказать [текст]"
+            ;; Вместо возврата строки, возвращаем структуру для API
+            {:type :chat-message
+            :from player-name
+            :message args
+            :action :broadcast})
         
         ;; 8. ПОМОЩЬ
         (and command (contains? #{"помощь" "help" "справка" "h" "?"} command))

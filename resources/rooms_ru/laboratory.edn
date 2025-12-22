@@ -4,7 +4,7 @@
   :exits {
     :north :hallway
   }
-  :items #{"keycard" "microscope" "wire"}
+  :items #{:keycard :microscope :wire}
   :players #{}
   :puzzle {
     :type :microscope-puzzle

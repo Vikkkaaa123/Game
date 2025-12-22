@@ -6,7 +6,7 @@
     :east :console_room
     :west :archive
   }
-  :items #{"blueprint"}
+  :items #{:blueprint}
   :players #{}
   :puzzle {
     :type :code-lock
