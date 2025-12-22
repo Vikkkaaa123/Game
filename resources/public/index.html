@@ -330,9 +330,9 @@
 				<div class="status-item">
 					<span>Игрок: <span id="player-name">Не авторизован</span></span>
 				</div>
-				<div class="status-item">
+				<!-- <div class="status-item">
 					<span>Онлайн: <span id="online-count">0</span></span>
-				</div>
+				</div> -->
 				<div class="status-item">
 					<span>Комнат: <span id="rooms-count">5</span></span>
 				</div>
@@ -356,12 +356,12 @@
 						</div>
 					</div> -->
 
-					<div class="sidebar-panel">
+					<!-- <div class="sidebar-panel">
 						<div class="panel-title">Ваш инвентарь</div>
 						<div class="inventory-list" id="inventory-list">
 							<div class="inventory-item">Пусто</div>
 						</div>
-					</div>
+					</div> -->
 
 					<div class="sidebar-panel">
 						<div class="panel-title">Команды</div>
@@ -732,17 +732,76 @@
 					.join("");
 			}
 
-			// Обновление инвентаря
+			// Обновление инвентаря (ИСПРАВЛЕННАЯ ВЕРСИЯ - для массива)
 			function updateInventoryList(inventory) {
-				if (!inventory || !inventory.size) {
+				console.log("🎯 ОБНОВЛЕНИЕ ИНВЕНТАРЯ вызвано:", inventory);
+				console.log("📊 Тип данных:", typeof inventory);
+				console.log("📊 Это массив?", Array.isArray(inventory));
+				console.log("📊 Это Set?", inventory instanceof Set);
+
+				// Проверяем элемент
+				if (!elements.inventoryList) {
+					console.error("❌ Элемент inventory-list не найден!");
+					elements.inventoryList = document.getElementById("inventory-list");
+					console.log("🔍 Переопределили элемент:", elements.inventoryList);
+				}
+
+				// Проверяем данные
+				if (!inventory) {
+					console.log("📭 inventory is null/undefined");
 					elements.inventoryList.innerHTML =
 						'<div class="inventory-item">Пусто</div>';
 					return;
 				}
 
-				elements.inventoryList.innerHTML = Array.from(inventory)
+				// Проверяем длину (для массива) или размер (для Set)
+				let itemCount;
+				if (Array.isArray(inventory)) {
+					itemCount = inventory.length;
+					console.log(`📦 Массив содержит ${itemCount} элементов`);
+				} else if (inventory instanceof Set) {
+					itemCount = inventory.size;
+					console.log(`📦 Set содержит ${itemCount} элементов`);
+				} else {
+					console.error("❌ Неизвестный тип inventory:", inventory);
+					itemCount = 0;
+				}
+
+				// Если нет предметов
+				if (itemCount === 0) {
+					console.log("📭 Инвентарь пуст");
+					elements.inventoryList.innerHTML =
+						'<div class="inventory-item">Пусто</div>';
+					return;
+				}
+
+				console.log(`🔄 Добавляю ${itemCount} предмет(ов)...`);
+
+				// Преобразуем в массив если это Set
+				let itemsArray;
+				if (inventory instanceof Set) {
+					itemsArray = Array.from(inventory);
+				} else {
+					itemsArray = inventory;
+				}
+
+				console.log("📋 Предметы для отображения:", itemsArray);
+
+				// Создаем HTML
+				const itemsHTML = itemsArray
 					.map((item) => `<div class="inventory-item">${item}</div>`)
 					.join("");
+
+				console.log("🖥️  HTML для установки:", itemsHTML);
+
+				// Устанавливаем HTML
+				elements.inventoryList.innerHTML = itemsHTML;
+
+				console.log("✅ ИНВЕНТАРЬ ОБНОВЛЕН!");
+				console.log(
+					"🔍 Проверка DOM: теперь элементов -",
+					elements.inventoryList.children.length
+				);
 			}
 
 			// Регистрация игрока
