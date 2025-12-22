@@ -113,10 +113,13 @@
         
         ;; 7. СКАЗАТЬ В КОМНАТЕ
         (and command (contains? #{"сказать" "say" "с"} command))
-        (if (str/blank? args)
-          "Скажите что-нибудь: сказать [текст]"
-          ;; Здесь будет интеграция с чатом
-          (str "Вы сказали: \"" args "\""))
+            (if (str/blank? args)
+              "Скажите что-нибудь: сказать [текст]"
+              ;; Вместо возврата строки, возвращаем структуру для API
+              {:type :chat-message
+              :from player-name
+              :message args
+              :action :broadcast})
         
         ;; 8. ПОМОЩЬ
         (and command (contains? #{"помощь" "help" "справка" "h" "?"} command))
