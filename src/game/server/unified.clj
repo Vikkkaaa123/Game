@@ -264,7 +264,7 @@
   (println "Telnet порт:" telnet-port)
   (println "Web порт:" web-port)
   
-  (api/init-game)
+  (api/init-api)
   (reset! connections {})
   
   ;; Telnet сервер
